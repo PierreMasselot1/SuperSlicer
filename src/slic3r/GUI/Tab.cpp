@@ -1186,6 +1186,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
     }
 
     //wxGetApp().preset_bundle->value_changed(opt_key);
+    // update phony fields
     if (m_config->value_changed(opt_key, { wxGetApp().plater()->config() })) {
         update_dirty();
         //# Initialize UI components with the config values.
