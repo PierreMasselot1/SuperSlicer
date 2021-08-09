@@ -1253,7 +1253,7 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const Polyline& loop_polygon
     bool has_speed = !small_speed.empty() || !big_speed.empty();
     bool has_flow = !small_flow.empty() || !big_flow.empty();
 
-    std::function<void(std::function<bool(ExtrusionPath&, ExtrusionPath&, ExtrusionPath&)>)> foreach = [&](std::function<bool(ExtrusionPath&, ExtrusionPath&, ExtrusionPath&)>& doforeach) {
+    std::function<void(ExtrusionPaths&, const std::function<bool(ExtrusionPath&, ExtrusionPath&, ExtrusionPath&)>&)> foreach = [](ExtrusionPaths &paths, const std::function<bool(ExtrusionPath&, ExtrusionPath&, ExtrusionPath&)>& doforeach) {
         if (paths.size() > 2)
             for (int i = 1; i < paths.size() - 1; i++) {
                 if (doforeach(paths[i - 1], paths[i], paths[i + 1])) {
@@ -1287,7 +1287,7 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const Polyline& loop_polygon
         double min_length = this->perimeter_flow.scaled_width() * 2;
         double ok_length = this->perimeter_flow.scaled_width() * 20;
 
-        foreach([&](ExtrusionPath& prev, ExtrusionPath& curr, ExtrusionPath& next) {
+        foreach(paths, [min_length, ok_length](ExtrusionPath& prev, ExtrusionPath& curr, ExtrusionPath& next) {
             if (curr.length() < min_length) {
                 float diff_height = std::abs(prev.height - curr.height) - std::abs(next.height - curr.height);
                 //have to choose the rigth path
@@ -1316,7 +1316,7 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const Polyline& loop_polygon
             return false;
         });
 
-        foreach([&](ExtrusionPath& prev, ExtrusionPath& curr, ExtrusionPath& next) {
+        foreach(paths, [](ExtrusionPath& prev, ExtrusionPath& curr, ExtrusionPath& next) {
             if (curr.height == 3) {
                 //have to choose the rigth path
                 if (prev.height == 4 || (prev.height == 2 && next.height < 2)) {
@@ -1334,7 +1334,7 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const Polyline& loop_polygon
             }
             return false;
         });
-        foreach([&](ExtrusionPath& prev, ExtrusionPath& curr, ExtrusionPath& next) {
+        foreach(paths, [](ExtrusionPath& prev, ExtrusionPath& curr, ExtrusionPath& next) {
             if (curr.height == 1) {
                 //have to choose the rigth path
                 if (prev.height == 2 || (prev.height == 0 && next.height > 2)) {
