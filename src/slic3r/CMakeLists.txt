@@ -251,6 +251,8 @@ set(SLIC3R_GUI_SOURCES
     Utils/TCPConsole.hpp
     Utils/MKS.cpp
     Utils/MKS.hpp
+    Utils/Raise3D.cpp
+    Utils/Raise3D.hpp
     Utils/WinRegistry.cpp
     Utils/WinRegistry.hpp
 )
