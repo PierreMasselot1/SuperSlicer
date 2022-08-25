@@ -29,21 +29,14 @@ public:
     PrintHostPostUploadActions get_post_upload_actions() const override { return PrintHostPostUploadAction::StartPrint; }
     bool supports_multiple_printers() const override { return true; }
     std::string get_host() const override { return host; }
-    
-    bool get_groups(wxArrayString &groups) const override;
-    bool get_printers(wxArrayString &printers) const override;
 
-protected:
-    virtual bool validate_version_text(const boost::optional<std::string> &version_text) const;
 
 private:
     std::string host;
     std::string apikey;
     std::string cafile;
     std::string port;
-    std::string token;
 
-    void set_auth(Http &http) const;
     std::string make_url(const std::string &path) const;
 };
 

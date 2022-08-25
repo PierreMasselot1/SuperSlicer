@@ -23,8 +23,10 @@
 
 namespace fs = boost::filesystem;
 namespace pt = boost::property_tree;
+static std::string token;
 
 namespace Slic3r {
+static std::string token;
 
 Raise3D::Raise3D(DynamicPrintConfig *config)
     : host(config->opt_string("print_host"))
@@ -37,10 +39,9 @@ const char *Raise3D::get_name() const { return "Raise3D"; }
 
 bool Raise3D::test(wxString &msg) const
 {
-    // Since all commands call test before running, test is going to call the
-    // login endpoint,
-    // and if a token is received back from the printer it means that login
-    // was successful
+    // Since all commands call test before running, test is going to call
+    // the login endpoint, and if a token is received back from the
+    // printer it means that login was successful
 
     const char *name = get_name();
 
@@ -101,7 +102,7 @@ bool Raise3D::test(wxString &msg) const
     boost::to_lower(result);
 
     const std::string sign = result;
-    url = url +
+    url                    = url +
           (boost::format("?sign=%1%&timestamp=%2%") % sign % timestamp).str();
 
     BOOST_LOG_TRIVIAL(info)
@@ -111,30 +112,22 @@ bool Raise3D::test(wxString &msg) const
 
     http.on_error([&](std::string body, std::string error, unsigned status) {
             BOOST_LOG_TRIVIAL(error)
-                << boost::format("%1%: Error getting version: %2%, HTTP %3%, "
-                                 "body: `%4%`") %
-                       name % error % status % body;
+                << boost::format("%1%: Error logging into the printer") %
+                       name;
             res = false;
             msg = format_error(body, error, status);
         })
         .on_complete([&, this](std::string body, unsigned) {
-            BOOST_LOG_TRIVIAL(debug)
-                << boost::format("%1%: Got version: %2%") % name % body;
-
             try {
                 std::stringstream ss(body);
                 pt::ptree         ptree;
                 pt::read_json(ss, ptree);
 
-                const auto text = ptree.get_optional<std::string>("name");
-                res             = validate_version_text(text);
-                if (!res) {
-                    msg = GUI::from_u8(
-                        (boost::format(
-                             _utf8(L("Mismatched type of print host: %s"))) %
-                         (text ? *text : "Raise3D"))
-                            .str());
-                }
+                const std::string text = ptree.get_value<std::string>(
+                    "data.token");
+                token = text;
+                ;
+
             } catch (const std::exception &) {
                 res = false;
                 msg = "Could not parse server response";
@@ -152,11 +145,12 @@ wxString Raise3D::get_test_ok_msg() const
 
 wxString Raise3D::get_test_failed_msg(wxString &msg) const
 {
-    return GUI::from_u8(
-        (boost::format("%s: %s\n\n%s") %
-         _utf8(L("Could not connect to Raise3D")) % std::string(msg.ToUTF8()) %
-         _utf8(L("Note: Raise3D version at least 0.90.0 is required.")))
-            .str());
+    return GUI::from_u8((boost::format("%s: %s\n\n%s") %
+                         _utf8(L("Could not connect to Raise3D")) %
+                         std::string(msg.ToUTF8()) %
+                         _utf8(L("Note: make sure that the API is "
+                                 "enabled on your 3D printer")))
+                            .str());
 }
 
 bool Raise3D::upload(PrintHostUpload upload_data,
@@ -167,6 +161,7 @@ bool Raise3D::upload(PrintHostUpload upload_data,
 
     const auto upload_filename    = upload_data.upload_path.filename();
     const auto upload_parent_path = upload_data.upload_path.parent_path();
+    const std::string upload_path = "Local / webapi_store";
 
     wxString test_msg;
     if (!test(test_msg)) {
@@ -176,11 +171,8 @@ bool Raise3D::upload(PrintHostUpload upload_data,
 
     bool res = true;
 
-    auto url = upload_data.post_action ==
-                       PrintHostPostUploadAction::StartPrint ?
-                   make_url((boost::format("printer/job/%1%") % port).str()) :
-                   make_url((boost::format("printer/model/%1%") % port).str());
-
+    auto url = make_url(
+        (boost::format("fileops/upload?token=%1%") % token).str());
     BOOST_LOG_TRIVIAL(info)
         << boost::format("%1%: Uploading file %2% at %3%, filename: %4%, "
                          "path: %5%, print: %6%, group: %7%") %
@@ -192,18 +184,15 @@ bool Raise3D::upload(PrintHostUpload upload_data,
                     "false") %
                upload_data.group;
 
-    auto http = Http::post(std::move(url));
+    auto              http = Http::post(std::move(url));
+    const std::string desc =
+        (boost::format("{\"dir_path\": \"%1%\"}") % upload_path).str();
+    http.form_add("desc", desc);
 
-    if (!upload_data.group.empty() &&
-        upload_data.group != _utf8(L("Default"))) {
-        http.form_add("group", upload_data.group);
-    }
-
-    if (upload_data.post_action == PrintHostPostUploadAction::StartPrint) {
-        http.form_add("name", upload_filename.string());
-    }
-
-    http.form_add("a", "upload")
+    http.form_add("name", "file")
+        .form_add("filename",
+                  upload_filename.string()) // this might already be the behavior
+                                            // of form_add_file, needs testing
         .form_add_file("filename", upload_data.source_path.string(),
                        upload_filename.string())
         .on_complete([&](std::string body, unsigned status) {
@@ -232,130 +221,17 @@ bool Raise3D::upload(PrintHostUpload upload_data,
     return res;
 }
 
-bool Raise3D::validate_version_text(
-    const boost::optional<std::string> &version_text) const
-{
-    return version_text ? boost::starts_with(*version_text, "Raise3D") : true;
-}
-
 std::string Raise3D::make_url(const std::string &path) const
 {
     if (host.find("http://") == 0 || host.find("https://") == 0) {
         if (host.back() == '/') {
-            return (boost::format("%1%%2%") % host % path).str();
+            return (boost::format("%1%/v1/%2%") % host % path).str();
         } else {
-            return (boost::format("%1%/%2%") % host % path).str();
+            return (boost::format("%1%/v1/%2%") % host % path).str();
         }
     } else {
-        return (boost::format("http://%1%/%2%") % host % path).str();
+        return (boost::format("http://%1%/v1/%2%") % host % path).str();
     }
-}
-
-bool Raise3D::get_groups(wxArrayString &groups) const
-{
-    bool res = true;
-
-    const char *name = get_name();
-    auto url = make_url((boost::format("printer/api/%1%") % port).str());
-
-    BOOST_LOG_TRIVIAL(info)
-        << boost::format("%1%: Get groups at: %2%") % name % url;
-
-    auto http = Http::get(std::move(url));
-    http.form_add("a", "listModelGroups");
-    http.on_error([&](std::string body, std::string error, unsigned status) {
-            BOOST_LOG_TRIVIAL(error)
-                << boost::format("%1%: Error getting version: %2%, HTTP %3%, "
-                                 "body: `%4%`") %
-                       name % error % status % body;
-        })
-        .on_complete([&](std::string body, unsigned) {
-            BOOST_LOG_TRIVIAL(debug)
-                << boost::format("%1%: Got groups: %2%") % name % body;
-
-            try {
-                std::stringstream ss(body);
-                pt::ptree         ptree;
-                pt::read_json(ss, ptree);
-
-                BOOST_FOREACH (boost::property_tree::ptree::value_type &v,
-                               ptree.get_child("groupNames.")) {
-                    if (v.second.data() == "#") {
-                        groups.push_back(_utf8(L("Default")));
-                    } else {
-                        // Is it safe to assume that the data are utf-8 encoded?
-                        groups.push_back(GUI::from_u8(v.second.data()));
-                    }
-                }
-            } catch (const std::exception &) {
-                // msg = "Could not parse server response";
-                res = false;
-            }
-        })
-        .perform_sync();
-
-    return res;
-}
-
-bool Raise3D::get_printers(wxArrayString &printers) const
-{
-    const char *name = get_name();
-
-    bool res = true;
-    auto url = make_url("printer/list");
-
-    BOOST_LOG_TRIVIAL(info)
-        << boost::format("%1%: List printers at: %2%") % name % url;
-
-    auto http = Http::get(std::move(url));
-
-    http.on_error([&](std::string body, std::string error, unsigned status) {
-            BOOST_LOG_TRIVIAL(error)
-                << boost::format("%1%: Error listing printers: %2%, HTTP "
-                                 "%3%, body: `%4%`") %
-                       name % error % status % body;
-            res = false;
-        })
-        .on_complete([&](std::string body, unsigned http_status) {
-            BOOST_LOG_TRIVIAL(debug)
-                << boost::format("%1%: Got printers: %2%, HTTP status: %3%") %
-                       name % body % http_status;
-
-            if (http_status != 200)
-                throw HostNetworkError(
-                    GUI::format(_L("HTTP status: %1%\nMessage body: \"%2%\""),
-                                http_status, body));
-
-            std::stringstream ss(body);
-            pt::ptree         ptree;
-            try {
-                pt::read_json(ss, ptree);
-            } catch (const pt::ptree_error &err) {
-                throw HostNetworkError(GUI::format(
-                    _L("Parsing of host response failed.\nMessage body: "
-                       "\"%1%\"\nError: \"%2%\""),
-                    body, err.what()));
-            }
-
-            const auto error = ptree.get_optional<std::string>("error");
-            if (error) throw HostNetworkError(*error);
-
-            try {
-                BOOST_FOREACH (boost::property_tree::ptree::value_type &v,
-                               ptree.get_child("data.")) {
-                    const auto port = v.second.get<std::string>("slug");
-                    printers.push_back(Slic3r::GUI::from_u8(port));
-                }
-            } catch (const std::exception &err) {
-                throw HostNetworkError(GUI::format(
-                    _L("Enumeration of host printers failed.\nMessage body: "
-                       "\"%1%\"\nError: \"%2%\""),
-                    body, err.what()));
-            }
-        })
-        .perform_sync();
-
-    return res;
 }
 
 } // namespace Slic3r
