@@ -375,7 +375,8 @@ public:
         //char tdbuf[128];
         //sprintf(tdbuf, "M104 S%d  ;RESTORE PRE-TOOLCHANGE TEMP %s\n", tc_temp, fast ? "FAST MODE":"NORMAL MODE");
         //m_gcode += tdbuf;
-        set_extruder_temp(tc_temp, this->m_current_tool , false, ";RESTORE PRE-TOOLCHANGE TEMP " + fast ? "FAST MODE" : "NORMAL MODE");
+        //wait for temperature if toolchange_temp is enabled
+        set_extruder_temp(tc_temp, this->m_current_tool , (m_filpar[m_current_tool].filament_enable_toolchange_temp == true), ";RESTORE PRE-TOOLCHANGE TEMP " + fast ? "FAST MODE" : "NORMAL MODE");
         return *this;
     }
 
