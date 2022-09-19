@@ -370,13 +370,13 @@ public:
     }
 
     //restore toolchange_temp -skinnydip
-    WipeTowerWriter& restore_pre_toolchange_temp(int tc_temp, bool fast, bool wait = false) 
+    WipeTowerWriter& restore_pre_toolchange_temp(int tc_temp, bool fast) 
     {
         //char tdbuf[128];
         //sprintf(tdbuf, "M104 S%d  ;RESTORE PRE-TOOLCHANGE TEMP %s\n", tc_temp, fast ? "FAST MODE":"NORMAL MODE");
         //m_gcode += tdbuf;
         //wait for temperature if toolchange_temp is enabled
-        set_extruder_temp(tc_temp, this->m_current_tool , (wait && m_filpar[m_current_tool].filament_enable_toolchange_temp == true), ";RESTORE PRE-TOOLCHANGE TEMP " + fast ? "FAST MODE" : "NORMAL MODE");
+        set_extruder_temp(tc_temp, this->m_current_tool , false, ";RESTORE PRE-TOOLCHANGE TEMP " + fast ? "FAST MODE" : "NORMAL MODE");
         return *this;
     }
 
