@@ -1012,9 +1012,9 @@ void WipeTower::toolchange_Unload(
         
         
 
-        float total_retraction_distance = m_cooling_tube_retraction + m_cooling_tube_length/2.f - 15.f; // the 15mm is reserved for the first part after ramming
+        float total_retraction_distance = m_cooling_tube_retraction + m_cooling_tube_length/5.f - 5.f; // the 15mm is reserved for the first part after ramming
         writer.suppress_preview()
-            .retract(15.f, m_filpar[m_current_tool].unloading_speed_start * 60.f)
+            .retract(5.f, m_filpar[m_current_tool].unloading_speed_start * 60.f)
            ; // feedrate 5000mm/min = 83mm/s
 
         // set toolchange temperature just prior to filament being extracted
@@ -1055,9 +1055,11 @@ void WipeTower::toolchange_Unload(
     //otherwise, if toolchange temperature changes are on and in normal mode, return to the previously set temperature 
     else if (m_semm && (m_filpar[m_current_tool].filament_enable_toolchange_temp && (m_filpar[m_current_tool].filament_use_fast_skinnydip == false))) {
         if (new_temperature != 0)
-            writer.restore_pre_toolchange_temp(new_temperature, false); //skinnydip normal mode only
+            writer.restore_pre_toolchange_temp(new_temperature, true); //skinnydip normal mode only
         else
-            writer.restore_pre_toolchange_temp(m_filpar[m_current_tool].temperature, false); //skinnydip normal mode only
+            writer.restore_pre_toolchange_temp(
+                m_filpar[m_current_tool].temperature,
+                true); // skinnydip normal mode only
     }
 
     // Cooling:
@@ -1122,11 +1124,10 @@ void WipeTower::toolchange_Unload(
         //begin to restore pre toolchange temp after skinnydip move completes without delay  (SKINNYDIP--fast method)
         if (new_temperature != 0)
             writer
-                .restore_pre_toolchange_temp(new_temperature, true,
-                                             true); // skinnydip fast mode only
+                .restore_pre_toolchange_temp(new_temperature, true); // skinnydip fast mode only
         else
             writer.restore_pre_toolchange_temp(
-                m_filpar[m_current_tool].temperature, true, true); // skinnydip fast mode only
+                m_filpar[m_current_tool].temperature, true); // skinnydip fast mode only
     }
     //the following temperature change is suppressed if using skinnydip normal mode since it has already happened
     else if (is_first_layer() && (m_filpar[m_current_tool].filament_enable_toolchange_temp == true) &&
@@ -1134,8 +1135,7 @@ void WipeTower::toolchange_Unload(
         // obey first layer temperature setting
         if (new_temperature != 0 && (new_temperature != m_old_temperature || is_first_layer()) ) {
             writer
-                .restore_pre_toolchange_temp(new_temperature, true,
-                                             true); // skinnydip fast mode only
+                .restore_pre_toolchange_temp(new_temperature, true); // skinnydip fast mode only
             m_old_temperature = new_temperature;
         }
     }
